@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>美股交易估算器</title>
+    <!-- 啟用 iOS 全螢幕 App 模式 (PWA) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="股票估算器">
+    
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-bg: #1a1a1e;
+            --accent-color: #38bdf8;
+            --text-main: #ffffff;
+            --text-muted: #8e8e93;
+            --border-color: #2c2c32;
+            --profit-green: #34c759;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            /* 配合 iOS 瀏海屏頂部留白 */
+            padding: calc(env(safe-area-inset-top) + 10px) 15px calc(env(safe-area-inset-bottom) + 10px) 15px;
+            overflow: hidden;
+        }
+
+        /* 最高一格拉長拉滿，確保內容格不用上下滾動 */
+        .app-container {
+            width: 100%;
+            max-width: 450px;
+            height: 100%;
+            max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+            background-color: var(--card-bg);
+            border-radius: 24px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+        }
+
+        /* 上方輸入區域 */
+        .inputs-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto; /* 若加倉極多時允許此小區塊滾動，但外層絕不滾動 */
+            padding-right: 2px;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .stock-code-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stock-input {
+            width: 90px;
+            background: #252529;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 18px;
+            font-weight: bold;
+            padding: 6px 10px;
+            text-align: center;
+        }
+
+        .ticker-badge {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-color);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .fee-toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .fee-checkbox {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent-color);
+        }
+
+        /* 持倉紀錄列表 */
+        .holdings-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .holding-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .input-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .input-group label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .main-input {
+            width: 100%;
+            background: #252529;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 16px;
+            padding: 10px 12px;
+        }
+
+        .btn-add-buy {
+            background: #252529;
+            color: var(--accent-color);
+            border: 1px dashed var(--accent-color);
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .btn-add-buy:active {
+            background: rgba(56, 189, 248, 0.1);
+        }
+
+        .btn-delete-row {
+            background: transparent;
+            color: #ff453a;
+            border: none;
+            font-size: 18px;
+            padding: 0 4px;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+
+        .sell-section {
+            border-top: 1px solid var(--border-color);
+            padding-top: 12px;
+            margin-top: 4px;
+        }
+
+        /* 下方結果區域 */
+        .outputs-section {
+            border-top: 2px solid var(--border-color);
+            padding-top: 15px;
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .result-label {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .result-value-main {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--profit-green);
+        }
+
+        .result-value-sub {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .currency-label {
+            font-size: 13px;
+            color: var(--text-muted); /* 右下角 HKD 字樣回復 default 淡灰色 */
+            font-weight: normal;
+            margin-left: 4px;
+        }
+
+        .usd-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: normal;
+            margin-left: 4px;
+        }
+
+        .divider {
+            height: 1px;
+            background-color: var(--border-color);
+            margin: 2px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- 上方輸入區 -->
+    <div class="inputs-section">
+        <div class="header-row">
+            <div class="stock-code-wrapper">
+                <!-- 自動切換至大寫英文輸入法 -->
+                <input type="text" class="stock-input" value="SNXX" id="stockCode" 
+                       autocapitalize="characters" autocorrect="off" autocomplete="off" onfocus="this.select()">
+                <div class="ticker-badge" id="livePrice">現價: $15.74</div>
+            </div>
+            <div class="fee-toggle-wrapper">
+                <input type="checkbox" id="calcFee" class="fee-checkbox" checked onchange="calculateMetrics()">
+                <label Kakao="calcFee">富途美股手續費</label>
+            </div>
+        </div>
+
+        <!-- 買入持倉紀錄列表 -->
+        <div class="holdings-list" id="holdingsList">
+            <div class="holding-row" data-row-id="1">
+                <div class="input-group">
+                    <label>股數</label>
+                    <input type="number" class="main-input shares-input" value="45" inputmode="decimal" step="any" onfocus="this.select()" oninput="calculateMetrics()">
+                </div>
+                <div class="input-group">
+                    <label>買入價 (USD)</label>
+                    <input type="number" class="main-input buy-price-input" value="15.55" inputmode="decimal" step="any" onfocus="this.select()" oninput="calculateMetrics()">
+                </div>
+                <button class="btn-delete-row" style="visibility: hidden;">×</button>
+            </div>
+        </div>
+
+        <button class="btn-add-buy" onclick="addNewHoldingRow()">＋ 增加買入紀錄</button>
+
+        <!-- 賣出價獨立一筆 -->
+        <div class="sell-section">
+            <div class="input-group">
+                <label>賣出價 (USD)</label>
+                <input type="number" id="sellPrice" class="main-input" value="16.23" inputmode="decimal" step="any" onfocus="this.select()" oninput="calculateMetrics()">
+            </div>
+        </div>
+    </div>
+
+    <!-- 下方結果區 -->
+    <div class="outputs-section">
+        <div class="result-row">
+            <span class="result-label">預期淨收益</span>
+            <div>
+                <span class="result-value-main" id="profitHKD">0.00</span><span class="currency-label">HKD</span>
+            </div>
+        </div>
+        <div class="result-row" style="justify-content: flex-end; margin-top: -8px;">
+            <div>
+                <span style="color: var(--text-muted); font-size: 14px;" id="profitUSD">0.00</span><span class="usd-label">USD</span>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="result-row">
+            <span class="result-label">實際回報率</span>
+            <span class="result-value-sub" id="roiPercentage" style="color: var(--profit-green);">0.00%</span>
+        </div>
+
+        <div class="result-row">
+            <span class="result-label">買入總額 (本金)</span>
+            <div>
+                <span class="result-value-sub" id="totalBuyUSD">0.00</span><span class="usd-label">USD</span>
+                <span style="color: var(--text-muted); margin: 0 6px;">|</span>
+                <span class="result-value-sub" id="totalBuyHKD">0.00</span><span class="currency-label">HKD</span>
+            </div>
+        </div>
+
+        <div class="result-row">
+            <span class="result-label">賣出總額</span>
+            <div>
+                <span class="result-value-sub" id="totalSellUSD">0.00</span><span class="usd-label">USD</span>
+                <span style="color: var(--text-muted); margin: 0 6px;">|</span>
+                <span class="result-value-sub" id="totalSellHKD">0.00</span><span class="currency-label">HKD</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const FX_RATE = 7.8475; // 美元兌港元匯率固定值
+    let simulatedBasePrice = 15.74;
+
+    // 1. 每秒刷新即時股價 (獨立於計算邏輯之外)
+    setInterval(() => {
+        // 隨機上下跳動 0.01-0.03 作為每秒即時行情
+        const change = (Math.random() * 0.04 - 0.02);
+        simulatedBasePrice = Math.max(1.00, simulatedBasePrice + change);
+        
+        const code = document.getElementById('stockCode').value.toUpperCase() || 'STOCK';
+        document.getElementById('livePrice').innerText = `現價: $${simulatedBasePrice.toFixed(2)}`;
+    }, 1000);
+
+    // 2. 動態增加買入持倉紀錄欄位
+    function addNewHoldingRow() {
+        const list = document.getElementById('holdingsList');
+        const rowId = Date.now();
+        
+        const row = document.createElement('div');
+        row.className = 'holding-row';
+        row.setAttribute('data-row-id', rowId);
+        
+        row.innerHTML = `
+            <div class="input-group">
+                <input type="number" class="main-input shares-input" value="10" inputmode="decimal" step="any" onfocus="this.select()" oninput="calculateMetrics()">
+            </div>
+            <div class="input-group">
+                <input type="number" class="main-input buy-price-input" value="15.00" inputmode="decimal" step="any" onfocus="this.select()" oninput="calculateMetrics()">
+            </div>
+            <button class="btn-delete-row" onclick="deleteHoldingRow(${rowId})">×</button>
+        `;
+        
+        list.appendChild(row);
+        calculateMetrics();
+    }
+
+    // 3. 刪除特定持倉欄位
+    function deleteHoldingRow(rowId) {
+        const row = document.querySelector(`[data-row-id="${rowId}"]`);
+        if (row) {
+            row.remove();
+            calculateMetrics();
+        }
+    }
+
+    // 4. 精算核心邏輯 (完全基於手動輸入的買入、賣出價)
+    function calculateMetrics() {
+        const rows = document.querySelectorAll('.holding-row');
+        const sellPrice = parseFloat(document.getElementById('sellPrice').value) || 0;
+        const isFeeEnabled = document.getElementById('calcFee').checked;
+
+        let totalShares = 0;
+        let totalBuyPrincipal = 0;
+        let totalBuyFees = 0;
+        let totalSellFees = 0;
+
+        // 加總計算多筆持倉紀錄
+        rows.forEach(row => {
+            const shares = parseFloat(row.querySelector('.shares-input').value) || 0;
+            const buyPrice = parseFloat(row.querySelector('.buy-price-input').value) || 0;
+
+            if (shares > 0 && buyPrice > 0) {
+                totalShares += shares;
+                totalBuyPrincipal += (shares * buyPrice);
+
+                // 計算每筆買入的富途收費
+                if (isFeeEnabled) {
+                    const commission = Math.max(0.99, shares * 0.0049);
+                    const platformFee = Math.max(1.00, shares * 0.005);
+                    const settlementFee = shares * 0.003;
+                    totalBuyFees += (commission + platformFee + settlementFee);
+                }
+            }
+        });
+
+        const totalSellRevenue = totalShares * sellPrice;
+
+        // 計算單筆一次過賣出的富途收費
+        if (isFeeEnabled && totalShares > 0 && sellPrice > 0) {
+            const commission = Math.max(0.99, totalShares * 0.0049);
+            const platformFee = Math.max(1.00, totalShares * 0.005);
+            const settlementFee = totalShares * 0.003;
+            const secFee = totalSellRevenue * 0.0000206;
+            const tafFee = totalShares * 0.000195;
+            totalSellFees += (commission + platformFee + settlementFee + secFee + tafFee);
+        }
+
+        const totalFees = totalBuyFees + totalSellFees;
+        
+        // 核心收益計算法 (不隨即時股價跳動)
+        const grossProfitUSD = totalSellRevenue - totalBuyPrincipal;
+        const netProfitUSD = grossProfitUSD - totalFees;
+        const netProfitHKD = netProfitUSD * FX_RATE;
+
+        // 總投入成本 (本金 + 買入手續費)
+        const totalCostUSD = totalBuyPrincipal + totalBuyFees;
+        const roi = totalCostUSD > 0 ? (netProfitUSD / totalCostUSD) * 100 : 0;
+
+        // 更新 UI 數據顯示
+        document.getElementById('profitHKD').innerText = netProfitHKD.toFixed(2);
+        document.getElementById('profitUSD').innerText = netProfitUSD.toFixed(2);
+        document.getElementById('roiPercentage').innerText = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
+        
+        document.getElementById('totalBuyUSD').innerText = totalBuyPrincipal.toFixed(2);
+        document.getElementById('totalBuyHKD').innerText = (totalBuyPrincipal * FX_RATE).toFixed(2);
+        
+        document.getElementById('totalSellUSD').innerText = totalSellRevenue.toFixed(2);
+        document.getElementById('totalSellHKD').innerText = (totalSellRevenue * FX_RATE).toFixed(2);
+
+        // 根據賺蝕動態調整回報率與收益字體顏色
+        const color = netProfitUSD >= 0 ? '#34c759' : '#ff453a';
+        document.getElementById('profitHKD').style.color = color;
+        document.getElementById('roiPercentage').style.color = color;
+    }
+
+    // 初始化首次計算
+    window.onload = () => {
+        calculateMetrics();
+    };
+</script>
+
+</body>
+</html>
